@@ -58,10 +58,10 @@ class GeniusLyricsApi : LyricsApi, Controller() {
 
         val track = withContext(Dispatchers.IO) { Jsoup.parse(URL(trackUrl), 5000) }
 
-        println(track.select(".Lyrics__Container-sc-1ynbvzw-7").text())
+        println(track.select(".Lyrics__Container-sc-1ynbvzw-8").text())
 
         val sb = StringUtil.borrowBuilder()
-        for (element in track.select(".Lyrics__Container-sc-1ynbvzw-7")) {
+        for (element in track.select(".Lyrics__Container-sc-1ynbvzw-8")) {
             sb.append("\n")
             sb.append(element.text('\n'))
         }
