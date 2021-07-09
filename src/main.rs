@@ -1,76 +1,168 @@
-use iced::{
-    executor, time, Align, Application, Clipboard, Column, Command, Element, Settings,
-    Subscription, Text,
-};
+use std::time::Duration;
 
+use druid::{AppLauncher, ArcStr, Data, Env, Event, EventCtx, Lens, Selector, Target, widget::{Controller, Flex, Label, WidgetExt}, Widget, WindowDesc, FontDescriptor, FontWeight, UnitPoint};
+use druid::kurbo::Arc;
+use druid::widget::{Align, Container, MainAxisAlignment, Padding, Scroll, SizedBox, Split, LineBreaking, FlexParams, CrossAxisAlignment};
+
+use crate::genius_scraper::GeniusScraper;
 use crate::spotify_mem_reader::SpotifyMemReader;
+use std::fmt::{Display, Formatter};
+use core::fmt;
 
 mod spotify_mem_reader;
+mod genius_scraper;
 
-#[derive(Default)]
+#[derive(Debug, Clone, Data, Lens)]
 struct LiveSpotifyLyrics {
     lyrics: String,
-    is_playing: bool,
+    current_track: Option<CurrentTrack>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Data, PartialEq, Eq, Hash)]
 pub struct CurrentTrack {
     title: String,
     author: String,
 }
 
-#[derive(Debug)]
-enum Message {
-    Tick(),
-    // CurrentTrackUpdated(CurrentTrack)
+impl Display for CurrentTrack {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{} - {}", self.title, self.author)
+    }
 }
 
-impl Application for LiveSpotifyLyrics {
-    type Executor = executor::Default;
-    type Message = Message;
-    type Flags = ();
+fn make_ui() -> impl Widget<LiveSpotifyLyrics> {
+    let song_font = FontDescriptor::default()
+        .with_weight(FontWeight::BOLD)
+        .with_size(20.0);
 
-    fn new(_flags: ()) -> (Self, Command<Message>) {
-        (
-            LiveSpotifyLyrics {
-                lyrics: "Nothing playing!".to_string(),
-                is_playing: false,
-            },
-            Command::none(),
-        )
+    let song_label = Label::dynamic(|track: &Option<CurrentTrack>, _|
+        track.as_ref()
+            .map(|track| format!("{} - {}", track.title, track.author))
+            .unwrap_or(format!("Play something!"))
+    )
+        .with_font(song_font)
+        .with_line_break_mode(LineBreaking::WordWrap)
+        .lens(LiveSpotifyLyrics::current_track)
+        .align_left();
+
+    let lyric_label = Label::dynamic(|lyrics: &String, _| lyrics.to_string())
+        .with_line_break_mode(LineBreaking::WordWrap)
+        .lens(LiveSpotifyLyrics::lyrics)
+        .expand_width();
+
+    let lyric_scroll = Scroll::new(lyric_label)
+        .vertical()
+        .align_left();
+
+    let root = Padding::new(
+        10.0,
+        Flex::column()
+            .with_child(song_label)
+            .with_default_spacer()
+            .with_flex_child(lyric_scroll, FlexParams::new(1.0, CrossAxisAlignment::Baseline))
+            .with_default_spacer()
+            .with_child(Label::new("made by lost").with_text_size(12.0).align_left()),
+    );
+
+    let event_handler = EventHandler::new();
+    return root.controller(event_handler);
+}
+
+struct EventHandler {}
+
+impl EventHandler {
+    pub fn new() -> Self {
+        EventHandler {}
     }
+}
 
-    fn title(&self) -> String {
-        String::from("Live Spotify Lyrics")
-    }
+impl<W: Widget<LiveSpotifyLyrics>> Controller<LiveSpotifyLyrics, W> for EventHandler {
+    fn event(
+        &mut self,
+        child: &mut W,
+        ctx: &mut EventCtx,
+        event: &Event,
+        data: &mut LiveSpotifyLyrics,
+        env: &Env,
+    ) {
+        match event {
+            Event::Command(cmd) if cmd.is(UPDATE_TRACK) => {
+                data.current_track = cmd.get_unchecked(UPDATE_TRACK).clone();
 
-    fn update(&mut self, message: Message, _clipboard: &mut Clipboard) -> Command<Message> {
-        match message {
-            Message::Tick() => {
-                self.is_playing = unsafe { SpotifyMemReader::is_playing() }.unwrap_or(false)
+                if data.current_track.is_none() {
+                    data.lyrics = String::from("Start playing something!")
+                } else {
+                    data.lyrics = String::from("processing...");
+                }
+
+                ctx.request_paint();
             }
-            // Message::CurrentTrackUpdated(current) => {
-          //     current.to_string();
-          //     ()
-          // }
+            Event::Command(cmd) if cmd.is(UPDATE_LYRIC) => {
+                data.lyrics = cmd.get_unchecked(UPDATE_LYRIC).clone();
+                ctx.request_paint()
+            }
+            _ => child.event(ctx, event, data, env)
         }
-
-        Command::none()
-    }
-
-    fn subscription(&self) -> Subscription<Message> {
-        time::every(std::time::Duration::from_micros(100000)).map(|_| Message::Tick())
-    }
-
-    fn view(&mut self) -> Element<Message> {
-        Column::new()
-            .padding(20)
-            .align_items(Align::Center)
-            .push(Text::new(self.is_playing.to_string()))
-            .into()
     }
 }
 
-fn main() -> iced::Result {
-    LiveSpotifyLyrics::run(Settings::default())
+const UPDATE_TRACK: Selector<Option<CurrentTrack>> = Selector::new("update-track");
+const UPDATE_LYRIC: Selector<String> = Selector::new("update-lyric");
+
+fn main() {
+    let window = WindowDesc::new(make_ui)
+        .title(ArcStr::from("Live Spotify Lyrics"));
+
+    let launcher = AppLauncher::with_window(window);
+
+    let event_sink = launcher.get_external_handle();
+
+    std::thread::spawn(move || unsafe {
+        let mut scraper: GeniusScraper = GeniusScraper::new();
+        let mut last_track: Option<CurrentTrack> = None;
+
+        loop {
+            let is_playing = SpotifyMemReader::is_playing().unwrap_or(false);
+            let current_track = if is_playing { SpotifyMemReader::current_track() } else { None };
+
+            if !cmp_eq_option!(current_track, last_track) {
+                last_track = current_track.clone();
+                if event_sink.submit_command(UPDATE_TRACK, current_track.clone(), Target::Auto).is_err() {
+                    break;
+                }
+
+                match current_track {
+                    // start processing lyrics
+                    Some(track) => {
+                        let lyrics = scraper.lyrics_for(track);
+
+                        if event_sink.submit_command(UPDATE_LYRIC, lyrics, Target::Auto).is_err() {
+                            break;
+                        }
+                    }
+                    None => ()
+                }
+            }
+
+            std::thread::sleep(Duration::from_millis(500));
+        }
+    });
+
+    launcher
+        .use_simple_logger()
+        .launch(LiveSpotifyLyrics {
+            lyrics: String::from("Start playing something!"),
+            current_track: None,
+        }).expect("launch failed")
+}
+
+#[macro_export]
+macro_rules! cmp_eq_option {
+    ($left:expr, $right:expr) => {{
+        match (&$left, &$right) {
+            (Some(left_val), Some(right_val)) => *left_val == *right_val,
+            (None, None) => true,
+            _ => false,
+        }
+    }};
 }
