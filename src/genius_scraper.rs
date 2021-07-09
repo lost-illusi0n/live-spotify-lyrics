@@ -1,14 +1,13 @@
-use std::iter::Map;
 use crate::CurrentTrack;
 use std::collections::HashMap;
 use druid::ArcStr;
 use serde::Deserialize;
+use select::predicate::Class;
+use select::node::Node;
 
 pub struct GeniusScraper {
     cache: HashMap<CurrentTrack, ArcStr>
 }
-
-const LYRIC_CLASS: &str = ".Lyrics__Container-sc-1ynbvzw-8";
 
 #[derive(Deserialize)]
 struct SearchResults {
@@ -22,16 +21,11 @@ struct Response {
 
 #[derive(Deserialize)]
 struct Section {
-    #[serde(rename = "type")]
-    type_name: String,
     hits: Vec<Hit>
 }
 
 #[derive(Deserialize)]
 struct Hit {
-    #[serde(rename = "type")]
-    type_name: String,
-    index: String,
     result: Result
 }
 
@@ -45,7 +39,7 @@ impl GeniusScraper {
         GeniusScraper { cache: Default::default() }
     }
 
-    fn _scrape(track: &CurrentTrack) -> Option<String> {
+    fn get_genius_track_url_for(track: &CurrentTrack) -> Option<String> {
         let results = reqwest::blocking::get(format!("https://genius.com/api/search/multi?q={}", track))
             .unwrap()
             .json::<SearchResults>()
@@ -55,19 +49,37 @@ impl GeniusScraper {
         let hit = section.hits.first()?;
         let track_url = &hit.result.url;
 
-        let body = reqwest::blocking::get(track_url).unwrap().text().unwrap();
+        Some(track_url.clone())
+    }
 
-        let fragment = scraper::Html::parse_document(&body);
+    fn _scrape(track: &CurrentTrack) -> Option<String> {
+        let track_url = GeniusScraper::get_genius_track_url_for(&track)?;
 
-        let lyrics = fragment
-            .select(&scraper::Selector::parse(LYRIC_CLASS).ok()?)
-            .map(|x| x.text().collect::<Vec<&str>>())
-            .map(|x| x.join::<&str>("\n"))
-            .fold("".to_string(), |acc, x| format!("{}\n{}", acc, x))
-            .trim()
-            .to_string();
+        let body = reqwest::blocking::get(track_url).ok()?.text().ok()?;
 
-        Some(lyrics)
+        println!("{}", body);
+
+        let doc = select::document::Document::from(&*body);
+
+        Some(doc.find(Class("Lyrics__Container-sc-1ynbvzw-8"))
+            .map(|n| format!("{}\n", GeniusScraper::text(&n, '\n')))
+            .fold("".to_string(), |acc, x| format!("{}{}", acc,  x))
+        )
+    }
+
+    pub fn text(node: &Node, separator: char) -> String {
+        let mut string = String::new();
+        recur(node, &mut string, separator);
+        return string;
+
+        fn recur(node: &Node, string: &mut String, seperator: char) {
+            if let Some(text) = node.as_text() {
+                string.push_str(&*format!("{}{}", text, seperator));
+            }
+            for child in node.children() {
+                recur(&child, string, seperator)
+            }
+        }
     }
 
     pub fn lyrics_for(&mut self, track: CurrentTrack) -> String {

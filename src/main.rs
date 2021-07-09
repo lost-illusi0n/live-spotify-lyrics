@@ -1,8 +1,7 @@
 use std::time::Duration;
 
-use druid::{AppLauncher, ArcStr, Data, Env, Event, EventCtx, Lens, Selector, Target, widget::{Controller, Flex, Label, WidgetExt}, Widget, WindowDesc, FontDescriptor, FontWeight, UnitPoint};
-use druid::kurbo::Arc;
-use druid::widget::{Align, Container, MainAxisAlignment, Padding, Scroll, SizedBox, Split, LineBreaking, FlexParams, CrossAxisAlignment};
+use druid::{AppLauncher, ArcStr, Data, Env, Event, EventCtx, Lens, Selector, Target, widget::{Controller, Flex, Label, WidgetExt}, Widget, WindowDesc, FontDescriptor, FontWeight};
+use druid::widget::{Padding, Scroll, LineBreaking, FlexParams, CrossAxisAlignment};
 
 use crate::genius_scraper::GeniusScraper;
 use crate::spotify_mem_reader::SpotifyMemReader;
