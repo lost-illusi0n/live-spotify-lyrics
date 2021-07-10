@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use druid::{AppLauncher, ArcStr, Data, Env, Event, EventCtx, Lens, Selector, Target, widget::{Controller, Flex, Label, WidgetExt}, Widget, WindowDesc, FontDescriptor, FontWeight};
+use druid::{AppLauncher, ArcStr, Data, Env, Event, EventCtx, Lens, Selector, Target, widget::{Controller, Flex, Label, WidgetExt}, Widget, WindowDesc, FontDescriptor, FontWeight, ExtEventSink};
 use druid::widget::{Padding, Scroll, LineBreaking, FlexParams, CrossAxisAlignment};
 
 use crate::genius_scraper::GeniusScraper;
@@ -116,6 +116,19 @@ fn main() {
 
     let event_sink = launcher.get_external_handle();
 
+    spawn_polling_thread(event_sink);
+
+    launcher
+        .use_simple_logger()
+        .launch(LiveSpotifyLyrics {
+            lyrics: String::from("Start playing something!"),
+            current_track: None,
+        }).expect("launch failed")
+}
+
+fn spawn_polling_thread(
+    event_sink: ExtEventSink
+) {
     std::thread::spawn(move || unsafe {
         let mut scraper: GeniusScraper = GeniusScraper::new();
         let mut last_track: Option<CurrentTrack> = None;
@@ -146,15 +159,7 @@ fn main() {
             std::thread::sleep(Duration::from_millis(500));
         }
     });
-
-    launcher
-        .use_simple_logger()
-        .launch(LiveSpotifyLyrics {
-            lyrics: String::from("Start playing something!"),
-            current_track: None,
-        }).expect("launch failed")
 }
-
 #[macro_export]
 macro_rules! cmp_eq_option {
     ($left:expr, $right:expr) => {{
