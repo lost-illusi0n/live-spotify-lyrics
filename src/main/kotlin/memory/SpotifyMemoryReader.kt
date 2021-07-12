@@ -19,10 +19,10 @@ class SpotifyMemoryReader : SpotifyApi {
 
     private companion object {
         // static pointers with offsets
-        private const val TRACK_BASE_ADR = 0x078C0F78
-        private val TRACK_OFFSETS = arrayOf(0x88, 0x2C, 0x20, 0x18, 0x0)
-        private const val PLAYING_BASE_ADR = 0x016B9D3C
-        private val PLAYING_OFFSETS = arrayOf(0x138)
+        private const val TRACK_BASE_ADR = 0x07940354
+        private val TRACK_OFFSETS = arrayOf(0x38, 0x3C, 0x4, 0x18, 0x0)
+        private const val PLAYING_BASE_ADR = 0x016C9300
+        private val PLAYING_OFFSETS = arrayOf(0x34, 0x0, 0x30, 0x4, 0x48)
 
         private val TERMINATING_SEQUENCE = listOf<Byte>(32, -62, -73)
 
