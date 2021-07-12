@@ -38,7 +38,6 @@ impl SpotifyMemReader {
         // this ptr_address will mutate to new pointer addresses based on [offsets]
         let mut ptr_address: u32 = address.clone() as u32;
 
-
         let pid = SpotifyMemReader::find_pid_by_name(SPOTIFY).unwrap();
         // get a handle on the spotify process
         let handle = OpenProcess(PROCESS_ALL_ACCESS, 0, pid);
@@ -55,7 +54,7 @@ impl SpotifyMemReader {
             panic!();
         };
 
-        // println!("offset: {:x}", address);
+        // println!("ptr: {:x}", address);
         // println!("first: {:x}", ptr_address);
 
         // iterate through our offsets
@@ -84,6 +83,8 @@ impl SpotifyMemReader {
         if CloseHandle(handle) == 0 {
             panic!()
         };
+
+        // println!("final {:x}", ptr_address);
 
         return Some(ptr_address as usize);
     }
@@ -136,7 +137,7 @@ impl SpotifyMemReader {
         let mut value: bool = false;
 
         // is_playing is at spotify_base_adr + 0x016B9D3C with offset 0x138, then write the byte into our boo value.
-        return if SpotifyMemReader::read_pointer_from_memory(spotify_base_adr + 0x016B9D3C, &[0x138], &mut value) {
+        return if SpotifyMemReader::read_pointer_from_memory(spotify_base_adr + 0x016C9300, &[0x34, 0x0, 0x30, 0x4, 0x48], &mut value) {
             Some(value)
         } else {
             None
@@ -153,7 +154,7 @@ impl SpotifyMemReader {
         // the current_track pointer we are using is based off lib_cef
         let lib_cef_base = SpotifyMemReader::get_module_base_address(LIB_CEF, pid).unwrap();
         // the address we want is lib_cef + 0x078C0F78, with the offsets 0x88, 0x2C, 0x20, 0x18, 0x0
-        let final_address = SpotifyMemReader::get_pointer_address_from_memory(lib_cef_base + 0x078C0F78, &[0x88, 0x2C, 0x20, 0x18, 0x0]).unwrap();
+        let final_address = SpotifyMemReader::get_pointer_address_from_memory(lib_cef_base + 0x07940354, &[0x38, 0x3C, 0x4, 0x18, 0x0]).unwrap();
 
         let handle = OpenProcess(PROCESS_ALL_ACCESS, 0, pid);
 
